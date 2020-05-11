@@ -1,0 +1,4 @@
+name = "AutoDiff"
+uuid = "74297d88-03d1-401d-b49d-baa7bab74246"
+authors = ["Will M. Farr <wfarr-vscholar@flatironinstitute.org>"]
+version = "0.1.0"

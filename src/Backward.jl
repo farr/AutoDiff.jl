@@ -10,7 +10,7 @@ function convert(::Type{BADNode{T}}, x::T) where T <: Number
     BADNodeConst(x, zero(x))
 end
 
-function promote_rule(::Type{S}, ::Type{T}) where {T <: Number, S <: BADNode{T}}
+function promote_rule(::Type{<:BADNode{T}}, ::Type{T}) where {T <: Number, R <: Number}
     BADNode{T}
 end
 

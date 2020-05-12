@@ -34,4 +34,14 @@ using AutoDiff.Backward
         ff = f(x,y,z)
         @test all(isapprox.(g(x,y,z), [ff/x, z*ff, y*ff]))
     end
+
+    @testset "sqrt" begin
+        f(x,y,z) = sqrt(x*x + y*y + z*z)
+        f_and_g = value_and_gradient(f)
+        x,y,z = randn(3)
+
+        ff, gg = f_and_g(x,y,z)
+
+        @test all(isapprox.(gg, [x/ff, y/ff, z/ff]))
+    end
 end

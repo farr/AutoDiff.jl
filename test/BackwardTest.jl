@@ -43,3 +43,73 @@ end
 
     @test all(isapprox.(gg, [x/ff, y/ff, z/ff]))
 end
+
+@testset "trig" begin
+    @testset "sin" begin
+        f(x,y,z) = x*sin(y*z)
+        g = gradient(f)
+        x,y,z = randn(3)
+        @test all(isapprox.(g(x,y,z), [sin(y*z), x*z*cos(y*z), x*y*cos(y*z)]))
+    end
+
+    @testset "cos" begin
+        f(x,y,z) = x*cos(y*z)
+        g = gradient(f)
+        x,y,z = randn(3)
+        @test all(isapprox.(g(x,y,z), [cos(y*z), -z*x*sin(y*z), -x*y*sin(y*z)]))
+    end
+
+    @testset "tan" begin
+        f(x,y,z) = x*tan(y*z)
+        ff(x,y,z) = x*sin(y*z)/cos(y*z)
+        g = gradient(f)
+        gg = gradient(ff)
+        x,y,z = randn(3)
+        @test all(isapprox.(g(x,y,z), gg(x,y,z)))
+    end
+
+    @testset "sec" begin
+        f(x,y,z) = x*sec(y*z)
+        ff(x,y,z) = x/cos(y*z)
+        g = gradient(f)
+        gg = gradient(ff)
+        x,y,z = randn(3)
+        @test all(isapprox.(g(x,y,z), gg(x,y,z)))
+    end
+
+    @testset "csc" begin
+        f(x,y,z) = x*csc(y*z)
+        ff(x,y,z) = x/sin(y*z)
+        g = gradient(f)
+        gg = gradient(ff)
+        x,y,z = randn(3)
+        @test all(isapprox.(g(x,y,z), gg(x,y,z)))
+    end
+
+    @testset "cot" begin
+        f(x,y,z) = x*cot(y*z)
+        ff(x,y,z) = x/tan(y*z)
+        g = gradient(f)
+        gg = gradient(ff)
+        x,y,z = randn(3)
+        @test all(isapprox.(g(x,y,z), gg(x,y,z)))
+    end
+
+    @testset "atan" begin
+        f(x,y,z) = atan(fff(x,y,z))
+        ff(x,y,z) = tan(f(x,y,z))
+        fff(x,y,z) = sqrt(x*x+y*y+z*z)
+        g = gradient(f)
+        gg = gradient(ff)
+        ggg = gradient(fff)
+        x,y,z = randn(3)
+        @test all(isapprox.(ggg(x,y,z), gg(x,y,z)))
+    end
+
+    @testset "atan2" begin
+        f(theta) = atan(sin(theta),cos(theta))
+        g = gradient(f)
+        theta = 2*pi*randn()
+        @test isapprox(g(theta), 1.0)
+    end
+end

@@ -2,7 +2,10 @@ module Backward
 
 export value_and_gradient, gradient
 
-import Base: +, *, -, /, exp, sqrt, convert, promote_rule, zero, one
+import Base: +, *, -, /, exp, sqrt
+import Base: sin, cos, tan, sec, csc, cot
+import Base: atan
+import Base: convert, promote_rule, zero, one
 
 abstract type BADNode{T<:Number} <: Number end
 
@@ -170,18 +173,108 @@ function sqrt(n::BADNode{T}) where T <: Number
     BADNodeSqrt(sqrt(n.value), zero(T), n)
 end
 
+function sin_deriv(x,y)
+    cos(x)
+end
+
+function cos_deriv(x,y)
+    -sin(x)
+end
+
+function tan_deriv(x, y)
+    z = sec(x)
+    z*z
+end
+
+function sec_deriv(x, y)
+    y*tan(x)
+end
+
+function csc_deriv(x, y)
+    -y*cot(x)
+end
+
+function cot_deriv(x, y)
+    z = csc(x)
+    -z*z
+end
+
+function atan_deriv(x, y)
+    one(x) / (one(x) + x*x)
+end
+
+for (f, df) in zip([:sin, :cos, :tan, :sec, :csc, :cot, :atan], [:sin_deriv, :cos_deriv, :tan_deriv, :sec_deriv, :csc_deriv, :cot_deriv, :atan_deriv])
+    fstr = uppercasefirst(string(f))
+    nodename = Symbol("BADNode$(fstr)")
+    @eval begin
+        mutable struct $nodename{T<:Number} <: BADNode{T}
+            x::T
+            value::T
+            adj::T
+            parent::BADNode{T}
+        end
+
+        function backprop!(n::$nodename{T}) where T<:Number
+            n.parent.adj += n.adj * $df(n.x, n.value)
+        end
+
+        function parents(n::$nodename{T}) where T <: Number
+            BADNode{T}[n.parent]
+        end
+
+        function $f(x::BADNode{T}) where T <: Number
+            $nodename(x.value, $f(x.value), zero(T), x)
+        end
+    end
+end
+
+mutable struct BADNodeAtan2{T<:Number} <: BADNode{T}
+    x::T
+    y::T
+    value::T
+    adj::T
+    lparent::BADNode{T}
+    rparent::BADNode{T}
+end
+
+function backprop!(n::BADNodeAtan2{T}) where T<:Number
+    denom = n.x*n.x + n.y*n.y
+    n.lparent.adj += n.adj * n.x / denom
+    n.rparent.adj += -n.adj * n.y / denom
+end
+
+function parents(n::BADNodeAtan2{T}) where {T<:Number}
+    BADNode{T}[n.lparent, n.rparent]
+end
+
+function atan(y::BADNode{T}, x::BADNode{T}) where {T<:Number}
+    BADNodeAtan2(x.value, y.value, atan(y.value, x.value), zero(T), y, x)
+end
+
+function breadth_first_backprop!(bplist)
+    while length(bplist) > 0
+        n = popfirst!(bplist)
+        backprop!(n)
+        push!(bplist, parents(n)...)
+    end
+end
+
 function value_and_gradient(f)
+    function vgf(x::T) where T<:Number
+        y = convert(BADNode{T}, x)
+        r = f(y)
+        r.adj = one(T)
+        bplist = BADNode{T}[r]
+        breadth_first_backprop!(bplist)
+        (r.value, r.adj)
+    end
+
     function vgf(x::Vararg{T,N}) where {T<:Number, N}
         y = BADNode{T}[convert(BADNode{T}, xx) for xx in x]
         r = f(y...)
         r.adj = one(T)
         bplist = BADNode{T}[r]
-
-        while length(bplist) > 0
-            n = popfirst!(bplist)
-            backprop!(n)
-            push!(bplist, parents(n)...)
-        end
+        breadth_first_backprop!(bplist)
 
         g = T[n.adj for n in y]
         (r.value, g)

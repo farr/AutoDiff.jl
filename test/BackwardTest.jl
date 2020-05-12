@@ -26,4 +26,12 @@ using AutoDiff.Backward
         x,y,z = randn(3)
         @test all(isapprox.(g(x,y,z), [-1.0, -z, -y]))
     end
+
+    @testset "exp" begin
+        f(x,y,z) = x*exp(y*z)
+        g = gradient(f)
+        x,y,z = randn(3)
+        ff = f(x,y,z)
+        @test all(isapprox.(g(x,y,z), [ff/x, z*ff, y*ff]))
+    end
 end

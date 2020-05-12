@@ -2,7 +2,7 @@ module Backward
 
 export value_and_gradient, gradient
 
-import Base: +, *, -, /, convert, promote_rule, zero, one
+import Base: +, *, -, /, exp, convert, promote_rule, zero, one
 
 abstract type BADNode{T<:Number} <: Number end
 
@@ -132,6 +132,24 @@ end
 
 function /(a::BADNode{T}, b::BADNode{T}) where T <: Number
     BADNodeDiv(a.value / b.value, zero(T), a, b)
+end
+
+mutable struct BADNodeExp{T<:Number} <: BADNode{T}
+    value::T
+    adj::T
+    parent::BADNode{T}
+end
+
+function backprop!(n::BADNodeExp{T}) where T <: Number
+    n.parent.adj += n.adj * n.value
+end
+
+function parents(n::BADNodeExp{T}) where T <: Number
+    BADNode{T}[n.parent]
+end
+
+function exp(n::BADNode{T}) where T <: Number
+    BADNodeExp(exp(n.value), zero(T), n)
 end
 
 function value_and_gradient(f)

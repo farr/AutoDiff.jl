@@ -113,3 +113,12 @@ end
         @test isapprox(g(theta), 1.0)
     end
 end
+
+@testset "sum like functions" begin
+    @testset "sum" begin
+        f(x, y, z) = sum([x,y,z])
+        g = gradient(f)
+        x,y,z = randn(3)
+        @test all(isapprox.(g(x,y,z), ones(3)))
+    end
+end

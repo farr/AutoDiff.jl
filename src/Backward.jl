@@ -5,6 +5,7 @@ export value_and_gradient, gradient
 import Base: +, *, -, /, exp, sqrt
 import Base: sin, cos, tan, sec, csc, cot
 import Base: atan
+import Base: sum
 import Base: convert, promote_rule, zero, one
 
 abstract type BADNode{T<:Number} <: Number end
@@ -249,6 +250,26 @@ end
 
 function atan(y::BADNode{T}, x::BADNode{T}) where {T<:Number}
     BADNodeAtan2(x.value, y.value, atan(y.value, x.value), zero(T), y, x)
+end
+
+mutable struct BADNodeSum{T<:Number} <: BADNode{T}
+    value::T
+    adj::T
+    parents::Array{<:BADNode{T}, 1}
+end
+
+function backprop!(n::BADNodeSum{T}) where T<:Number
+    for p in n.parents
+        p.adj += n.adj
+    end
+end
+
+function parents(n::BADNodeSum{T}) where T<:Number
+    n.parents
+end
+
+function sum(xs::Array{N}) where N<:BADNode
+    BADNodeSum(sum([x.value for x in xs]), zero(xs[1].value), xs)
 end
 
 function breadth_first_backprop!(bplist)

@@ -6,12 +6,12 @@ import Base: +, *, -, /, exp, sqrt, convert, promote_rule, zero, one
 
 abstract type BADNode{T<:Number} <: Number end
 
-function convert(::Type{BADNode{T}}, x::T) where T <: Number
-    BADNodeConst(x, zero(x))
+function convert(::Type{BADNode{T}}, x::T) where {T <: Number}
+    BADNodeConst(x, zero(T))
 end
 
-function promote_rule(::Type{<:BADNode{T}}, ::Type{T}) where {T <: Number, R <: Number}
-    BADNode{T}
+function promote_rule(::Type{<:BADNode{R}}, ::Type{T}) where {T <: Number, R <: Number}
+    BADNode{promote_type(R,T)}
 end
 
 mutable struct BADNodeConst{T<:Number} <: BADNode{T}

@@ -129,3 +129,10 @@ end
     x,y,z = abs.(randn(3))
     @test all(isapprox.(g(x,y,z), [1.0/x, 1.0/y, 1.0/z]))
 end
+
+@testset "log1p" begin
+    f(x,y,z) = log1p(x*y*z)
+    g = gradient(f)
+    x,y,z = 1e-3.*randn(3)
+    @test all(isapprox.(g(x,y,z), [y*z/(1+x*y*z), x*z/(1+x*y*z), x*y/(1+x*y*z)]))
+end

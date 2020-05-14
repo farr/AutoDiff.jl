@@ -2,11 +2,13 @@ module Backward
 
 export value_and_gradient, gradient
 
-import Base: +, *, -, /, exp, sqrt, log
+import Base: +, *, -, /, exp, sqrt, log, log1p
 import Base: sin, cos, tan, sec, csc, cot
 import Base: atan
 import Base: sum
 import Base: convert, promote_rule, zero, one
+
+import AutoDiff.StatsFunctions: logsumexp
 
 abstract type BADNode{T<:Number} <: Number end
 
@@ -259,7 +261,7 @@ end
 mutable struct BADNodeSum{T<:Number} <: BADNode{T}
     value::T
     adj::T
-    parents::Array{<:BADNode{T}, 1}
+    parents::Array{<:BADNode{T}}
 end
 
 function backprop!(n::BADNodeSum{T}) where T<:Number
@@ -269,10 +271,10 @@ function backprop!(n::BADNodeSum{T}) where T<:Number
 end
 
 function parents(n::BADNodeSum{T}) where T<:Number
-    n.parents
+    n.parents.reshape((prod(size(n.parents)...),))
 end
 
-function sum(xs::Array{N}) where N<:BADNode
+function sum(xs::Array{<:BADNode{T}, N}) where {T<:Number, N<:Integer}
     BADNodeSum(sum([x.value for x in xs]), zero(xs[1].value), xs)
 end
 
@@ -293,6 +295,25 @@ end
 
 function log(n::BADNode{T}) where T <: Number
     BADNodeLog(n.value, log(n.value), zero(T), n)
+end
+
+mutable struct BADNodeLog1p{T<:Number} <: BADNode{T}
+    x::T
+    value::T
+    adj::T
+    parent::BADNode{T}
+end
+
+function backprop!(n::BADNodeLog1p{T}) where T <: Number
+    n.parent.adj += n.adj / (one(T) + n.x)
+end
+
+function parents(n::BADNodeLog1p{T}) where T <: Number
+    BADNode{T}[n.parent]
+end
+
+function log1p(n::BADNode{T}) where T <: Number
+    BADNodeLog1p(n.value, log1p(n.value), zero(T), n)
 end
 
 function breadth_first_apply!(fn, bplist)

@@ -122,3 +122,10 @@ end
         @test all(isapprox.(g(x,y,z), ones(3)))
     end
 end
+
+@testset "log" begin
+    f(x,y,z) = log(x*y*z)
+    g = gradient(f)
+    x,y,z = abs.(randn(3))
+    @test all(isapprox.(g(x,y,z), [1.0/x, 1.0/y, 1.0/z]))
+end

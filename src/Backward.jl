@@ -2,7 +2,7 @@ module Backward
 
 export value_and_gradient, gradient
 
-import Base: +, *, -, /, exp, sqrt
+import Base: +, *, -, /, exp, sqrt, log
 import Base: sin, cos, tan, sec, csc, cot
 import Base: atan
 import Base: sum
@@ -274,6 +274,25 @@ end
 
 function sum(xs::Array{N}) where N<:BADNode
     BADNodeSum(sum([x.value for x in xs]), zero(xs[1].value), xs)
+end
+
+mutable struct BADNodeLog{T<:Number} <: BADNode{T}
+    x::T
+    value::T
+    adj::T
+    parent::BADNode{T}
+end
+
+function backprop!(n::BADNodeLog{T}) where T <: Number
+    n.parent.adj += n.adj / n.x
+end
+
+function parents(n::BADNodeLog{T}) where T <: Number
+    BADNode{T}[n.parent]
+end
+
+function log(n::BADNode{T}) where T <: Number
+    BADNodeLog(n.value, log(n.value), zero(T), n)
 end
 
 function breadth_first_apply!(fn, bplist)

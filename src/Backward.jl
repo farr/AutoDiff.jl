@@ -18,6 +18,10 @@ function promote_rule(::Type{<:BADNode{R}}, ::Type{T}) where {T <: Number, R <: 
     BADNode{promote_type(R,T)}
 end
 
+function reset!(n::BADNode{T}) where T <: Number
+    n.adj = zero(T)
+end
+
 mutable struct BADNodeConst{T<:Number} <: BADNode{T}
     value::T
     adj::T
@@ -272,10 +276,10 @@ function sum(xs::Array{N}) where N<:BADNode
     BADNodeSum(sum([x.value for x in xs]), zero(xs[1].value), xs)
 end
 
-function breadth_first_backprop!(bplist)
+function breadth_first_apply!(fn, bplist)
     while length(bplist) > 0
         n = popfirst!(bplist)
-        backprop!(n)
+        fn(n)
         push!(bplist, parents(n)...)
     end
 end
@@ -286,7 +290,7 @@ function value_and_gradient(f)
         r = f(y)
         r.adj = one(T)
         bplist = BADNode{T}[r]
-        breadth_first_backprop!(bplist)
+        breadth_first_apply!(backprop!, bplist)
         (r.value, r.adj)
     end
 
@@ -295,7 +299,7 @@ function value_and_gradient(f)
         r = f(y...)
         r.adj = one(T)
         bplist = BADNode{T}[r]
-        breadth_first_backprop!(bplist)
+        breadth_first_apply!(backprop!, bplist)
 
         g = T[n.adj for n in y]
         (r.value, g)

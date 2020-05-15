@@ -2,6 +2,7 @@ module Backward
 
 export value_and_gradient, gradient
 
+import Base: ==, !=, <, <=, >, >=, isless, isequal
 import Base: +, *, -, /, exp, sqrt, log, log1p
 import Base: sin, cos, tan, sec, csc, cot
 import Base: atan
@@ -20,8 +21,10 @@ function promote_rule(::Type{<:BADNode{R}}, ::Type{T}) where {T <: Number, R <: 
     BADNode{promote_type(R,T)}
 end
 
-function reset!(n::BADNode{T}) where T <: Number
-    n.adj = zero(T)
+for fn in [Symbol("=="), Symbol("!="), Symbol("<"), Symbol("<="), Symbol(">"), Symbol(">="), :isless, :isequal]
+    @eval begin
+        $fn(a::BADNode{T}, b::BADNode{T}) where {T <: Number} = $fn(a.value, b.value)
+    end
 end
 
 mutable struct BADNodeConst{T<:Number} <: BADNode{T}
@@ -316,6 +319,52 @@ function log1p(n::BADNode{T}) where T <: Number
     BADNodeLog1p(n.value, log1p(n.value), zero(T), n)
 end
 
+mutable struct BADNodeLogsumexp2Arg{T<:Number} <: BADNode{T}
+    x::T
+    y::T
+    value::T
+    adj::T
+    lparent::BADNode{T}
+    rparent::BADNode{T}
+end
+
+function backprop!(n::BADNodeLogsumexp2Arg{T}) where T <: Number
+    n.lparent.adj += n.adj*exp(n.x-n.value)
+    n.rparent.adj += n.adj*exp(n.y-n.value)
+end
+
+function parents(n::BADNodeLogsumexp2Arg{T}) where T <: Number
+    BADNode{T}[n.lparent, n.rparent]
+end
+
+function logsumexp(a::BADNode{T}, b::BADNode{T}) where T <: Number
+    BADNodeLogsumexp2Arg(a.value, b.value, logsumexp(a.value, b.value), zero(T), a, b)
+end
+
+mutable struct BADNodeLogsumexpArray{T<:Number} <: BADNode{T}
+    xs::Array{T, <:Any}
+    value::T
+    adj::T
+    parents::Array{BADNode{T}, <:Any}
+end
+
+function backprop!(n::BADNodeLogsumexpArray{T}) where T <: Number
+    for i in eachindex(n.parents)
+        p = n.parents[i]
+        x = n.xs[i]
+        p.adj += n.adj*exp(x-n.value)
+    end
+end
+
+function parents(n::BADNodeLogsumexpArray{T}) where T <: Number
+    vec(n.parents)
+end
+
+function logsumexp(xs::Array{BADNode{T}, N}) where {T <: Number, N <: Integer}
+    xx = [x.value for x in xs]
+    BADNodeLogsumexpArray(xx, logsumexp(xx), zero(T), xs)
+end
+
 function breadth_first_apply!(fn, bplist)
     while length(bplist) > 0
         n = popfirst!(bplist)
@@ -331,7 +380,23 @@ function value_and_gradient(f)
         r.adj = one(T)
         bplist = BADNode{T}[r]
         breadth_first_apply!(backprop!, bplist)
-        (r.value, r.adj)
+        (r.value, y.adj)
+    end
+
+    function vgf(xs::Array{T, N}) where {T <: Number, N}
+        ys = Array{BADNode{T}, N}(undef, size(xs))
+        for i in eachindex(xs)
+            ys[i] = convert(BADNode{T}, xs[i])
+        end
+        r = f(ys)
+        r.adj = one(T)
+        bplist = BADNode{T}[r]
+        breadth_first_apply!(backprop!, bplist)
+        zs = Array{T, N}(undef, size(xs))
+        for i in eachindex(xs)
+            zs[i] = ys[i].adj
+        end
+        (r.value, zs)
     end
 
     function vgf(x::Vararg{T,N}) where {T<:Number, N}

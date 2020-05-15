@@ -9,7 +9,7 @@ function logsumexp(a, b)
     x + log1p(exp(y-x))
 end
 
-function logsumexp(xs::Array{T}) where T <: Number
+function logsumexp(xs::Array{T,N}) where {T <: Number, N}
     xm = maximum(xs)
     xm + log(sum(exp.(xs.-xm)))
 end

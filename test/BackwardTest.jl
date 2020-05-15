@@ -8,6 +8,20 @@ using AutoDiff.Backward
     @test all(isapprox.(g(1.0, 2.0, 3.0), [1.0, 2.0/3.0, -4.0/9.0]))
 end
 
+@testset "one-arg functions" begin
+    f(x) = 2.0*x + 3.0
+    g = gradient(f)
+
+    @test isapprox(g(1.0), 2.0)
+end
+
+@testset "vector-mode functions" begin
+    f(xs) = sqrt(xs[1]*xs[1] + xs[2]*xs[2] + xs[3]*xs[3])
+    g = gradient(f)
+    xs = randn(3)
+    @test all(isapprox.(g(xs), [xs[1]/f(xs), xs[2]/f(xs), xs[3]/f(xs)]))
+end
+
 @testset "reuse variable" begin
     f(x, y, z) = x - 3.0*x/(y*z) + z*y
     g = gradient(f)
@@ -135,4 +149,17 @@ end
     g = gradient(f)
     x,y,z = 1e-3.*randn(3)
     @test all(isapprox.(g(x,y,z), [y*z/(1+x*y*z), x*z/(1+x*y*z), x*y/(1+x*y*z)]))
+end
+
+@testset "logsumexp" begin
+    f(x,y,z) = logsumexp(x, logsumexp(y, z))
+    f_exact(x,y,z) = log(exp(x) + exp(y) + exp(z))
+    g = gradient(f)
+    g_exact = gradient(f_exact)
+    gg = gradient(logsumexp) # Array version
+
+    x,y,z = randn(3)
+
+    @test all(isapprox.(g(x,y,z), g_exact(x,y,z)))
+    @test all(isapprox.(gg([x,y,z]), g_exact(x,y,z)))
 end

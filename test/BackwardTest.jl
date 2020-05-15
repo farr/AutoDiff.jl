@@ -22,6 +22,15 @@ end
     @test all(isapprox.(g(xs), [xs[1]/f(xs), xs[2]/f(xs), xs[3]/f(xs)]))
 end
 
+@testset "array-mode functions" begin
+    f(xs) = sqrt(sum(xs.*xs))
+    g = gradient(f)
+    xs = randn(3, 5, 7)
+    r = f(xs)
+    @test all(isapprox.(g(xs), xs./r))
+    @test size(g(xs))==(3,5,7)
+end
+
 @testset "reuse variable" begin
     f(x, y, z) = x - 3.0*x/(y*z) + z*y
     g = gradient(f)

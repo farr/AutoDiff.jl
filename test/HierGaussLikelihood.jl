@@ -1,3 +1,5 @@
+module HierGaussLikelihood
+
 using AutoDiff.Backward
 
 # This is a standard hierarchical likelihood.  We imagine that we have a set of
@@ -34,4 +36,6 @@ xobs = xs .+ sigmaobs.*randn(nx, no)
 loglike = make_hglikelihood(xobs, sigmaobs)
 g = gradient(loglike)
 
-g(mu, sigma, xs...) 
+g(mu, sigma, xs...)
+
+end

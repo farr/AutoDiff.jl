@@ -172,3 +172,17 @@ end
     @test all(isapprox.(g(x,y,z), g_exact(x,y,z)))
     @test all(isapprox.(gg([x,y,z]), g_exact(x,y,z)))
 end
+
+@testset "intermediate reuse" begin
+    function f(x,y,z)
+        q = x*y + cos(z*x)
+        x*sin(q) + z*q*q
+    end
+    g = gradient(f)
+    x,y,z = randn(3)
+
+    @test all(isapprox.(g(x,y,z),
+                        [(2.0*z*(x*y + cos(x*z)) + x*cos(x*y + cos(x*z)))*(y-z*sin(z*x)) + sin(x*y + cos(x*z)),
+                         x*(2.0*z*(x*y + cos(x*z)) + x*cos(x*y + cos(x*z))),
+                         (x*y + cos(x*z))^2 - x*(2.0*z*(x*y + cos(x*z)) + x*(cos(x*y + cos(x*z))))*sin(x*z)]))
+end

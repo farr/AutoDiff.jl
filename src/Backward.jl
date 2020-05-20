@@ -11,14 +11,35 @@ import Base: convert, promote_rule, zero, one
 
 import AutoDiff.StatsFunctions: logsumexp
 
-abstract type BADNode{T<:Number} <: Number end
-
-function convert(::Type{BADNode{T}}, x::T) where {T <: Number}
-    BADNodeConst(x, zero(T))
+mutable struct BADNode{T<:Number} <: Number
+    tape::Array{BADNode{T},1}
+    value::T
+    adj::T
+    backprop!
 end
 
-function promote_rule(::Type{<:BADNode{R}}, ::Type{T}) where {T <: Number, R <: Number}
-    BADNode{promote_type(R,T)}
+function zero(::Type{BADNode{T}}) where {T <: Number}
+    BADNode(BADNode{T}[], zero(T), zero(T), (n)->())
+end
+
+function zero(x::BADNode{T}) where {T <: Number}
+    BADNode(BADNode{T}[], zero(T), zero(T), (n)->())
+end
+
+function one(::Type{BADNode{T}}) where {T <: Number}
+    BADNode(BADNode{T}[], one(T), zero(T), (n)->())
+end
+
+function one(x::BADNode{T}) where {T <: Number}
+    BADNode(BADNode{T}[], one(T), zero(T), (n)->())
+end
+
+function convert(::Type{BADNode{T}}, x::T) where {T <: Number}
+    BADNode(BADNode{T}[], x, zero(T), (n)->())
+end
+
+function promote_rule(::Type{BADNode{T}}, ::Type{T}) where {T <: Number}
+    BADNode{T}
 end
 
 for fn in [Symbol("=="), Symbol("!="), Symbol("<"), Symbol("<="), Symbol(">"), Symbol(">="), :isless, :isequal]
@@ -27,160 +48,81 @@ for fn in [Symbol("=="), Symbol("!="), Symbol("<"), Symbol("<="), Symbol(">"), S
     end
 end
 
-mutable struct BADNodeConst{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
+function +(x::BADNode{T}, y::BADNode{T}) where {T <: Number}
+    t = (length(x.tape) == 0 ? y.tape : x.tape)
+    function bp!(n::BADNode{T})
+        x.adj += n.adj
+        y.adj += n.adj
+    end
+    n = BADNode(t, x.value + y.value, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
-function zero(n::BADNode{T}) where T <: Number
-    BADNodeConst(zero(T), zero(T))
+function -(x::BADNode{T}, y::BADNode{T}) where {T <: Number}
+    t = (length(x.tape) == 0 ? y.tape : x.tape)
+    function bp!(n::BADNode{T})
+        x.adj += n.adj
+        y.adj -= n.adj
+    end
+    n = BADNode(t, x.value - y.value, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
-function one(n::BADNode{T}) where T <: Number
-    BADNodeConst(one(T), zero(T))
+function -(x::BADNode{T}) where {T <: Number}
+    t = x.tape
+    function bp!(n::BADNode{T})
+        x.adj -= n.adj
+    end
+    n = BADNode(t, -x.value, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
-function backprop!(n::BADNodeConst{T}) where T <: Number
-    # noop---there is nothing to pass upward!
+function *(x::BADNode{T}, y::BADNode{T}) where {T <: Number}
+    t = (length(x.tape) == 0 ? y.tape : x.tape)
+    function bp!(n::BADNode{T})
+        x.adj += y.value*n.adj
+        y.adj += x.value*n.adj
+    end
+    n = BADNode(t, x.value*y.value, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
-function parents(n::BADNodeConst{T}) where T <: Number
-    # no parents, so empty list
-    BADNode{T}[]
+function /(x::BADNode{T}, y::BADNode{T}) where {T <: Number}
+    t = (length(x.tape) == 0 ? y.tape : x.tape)
+    r = x.value / y.value
+    function bp!(n::BADNode{T})
+        x.adj += n.adj / y.value
+        y.adj -= r / y.value * n.adj
+    end
+    n = BADNode(t, r, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
-mutable struct BADNodePlus{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    lparent::BADNode{T}
-    rparent::BADNode{T}
+function exp(x::BADNode{T}) where {T <: Number}
+    t = x.tape
+    r = exp(x.value)
+    function bp!(n::BADNode{T})
+        x.adj += r*n.adj
+    end
+    n = BADNode(t, r, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
-function backprop!(n::BADNodePlus{T}) where T <: Number
-    n.lparent.adj += n.adj
-    n.rparent.adj += n.adj
-end
-
-function parents(n::BADNodePlus{T}) where T <: Number
-    BADNode{T}[n.lparent, n.rparent]
-end
-
-function +(a::BADNode{T}, b::BADNode{T}) where T <: Number
-    BADNodePlus(a.value + b.value, zero(a.value), a, b)
-end
-
-mutable struct BADNodeMinus{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    lparent::BADNode{T}
-    rparent::BADNode{T}
-end
-
-function backprop!(n::BADNodeMinus{T}) where T <: Number
-    n.lparent.adj += n.adj
-    n.rparent.adj -= n.adj
-end
-
-function parents(n::BADNodeMinus{T}) where T <: Number
-    BADNode{T}[n.lparent, n.rparent]
-end
-
-function -(a::BADNode{T}, b::BADNode{T}) where T <: Number
-    BADNodeMinus(a.value - b.value, zero(T), a, b)
-end
-
-mutable struct BADNodeUMinus{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    parent::BADNode{T}
-end
-
-function backprop!(n::BADNodeUMinus{T}) where T <: Number
-    n.parent.adj -= n.adj
-end
-
-function parents(n::BADNodeUMinus{T}) where T <: Number
-    BADNode{T}[n.parent]
-end
-
-function -(a::BADNode{T}) where T <: Number
-    BADNodeUMinus(-a.value, zero(T), a)
-end
-
-mutable struct BADNodeTimes{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    lparent::BADNode{T}
-    rparent::BADNode{T}
-end
-
-function backprop!(n::BADNodeTimes{T}) where T <: Number
-    n.lparent.adj += n.adj*n.rparent.value
-    n.rparent.adj += n.adj*n.lparent.value
-end
-
-function parents(n::BADNodeTimes{T}) where T <: Number
-    BADNode{T}[n.lparent, n.rparent]
-end
-
-function *(a::BADNode{T}, b::BADNode{T}) where T <: Number
-    BADNodeTimes(a.value * b.value, zero(T), a, b)
-end
-
-mutable struct BADNodeDiv{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    lparent::BADNode{T}
-    rparent::BADNode{T}
-end
-
-function backprop!(n::BADNodeDiv{T}) where T <: Number
-    n.lparent.adj += n.adj / n.rparent.value
-    n.rparent.adj -= n.adj * n.value / n.rparent.value
-end
-
-function parents(n::BADNodeDiv{T}) where T <: Number
-    BADNode{T}[n.lparent, n.rparent]
-end
-
-function /(a::BADNode{T}, b::BADNode{T}) where T <: Number
-    BADNodeDiv(a.value / b.value, zero(T), a, b)
-end
-
-mutable struct BADNodeExp{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    parent::BADNode{T}
-end
-
-function backprop!(n::BADNodeExp{T}) where T <: Number
-    n.parent.adj += n.adj * n.value
-end
-
-function parents(n::BADNodeExp{T}) where T <: Number
-    BADNode{T}[n.parent]
-end
-
-function exp(n::BADNode{T}) where T <: Number
-    BADNodeExp(exp(n.value), zero(T), n)
-end
-
-mutable struct BADNodeSqrt{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    parent::BADNode{T}
-end
-
-function backprop!(n::BADNodeSqrt{T}) where T <: Number
-    n.parent.adj += n.adj / (2.0*n.value)
-end
-
-function parents(n::BADNodeSqrt{T}) where T <: Number
-    BADNode{T}[n.parent]
-end
-
-function sqrt(n::BADNode{T}) where T <: Number
-    BADNodeSqrt(sqrt(n.value), zero(T), n)
+function sqrt(x::BADNode{T}) where {T <: Number}
+    t = x.tape
+    r = sqrt(x.value)
+    function bp!(n::BADNode{T})
+        x.adj += n.adj / (convert(T, 2)*r)
+    end
+    n = BADNode(t, r, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
 function sin_deriv(x,y)
@@ -217,181 +159,142 @@ for (f, df) in zip([:sin, :cos, :tan, :sec, :csc, :cot, :atan], [:sin_deriv, :co
     fstr = uppercasefirst(string(f))
     nodename = Symbol("BADNode$(fstr)")
     @eval begin
-        mutable struct $nodename{T<:Number} <: BADNode{T}
-            x::T
-            value::T
-            adj::T
-            parent::BADNode{T}
-        end
-
-        function backprop!(n::$nodename{T}) where T<:Number
-            n.parent.adj += n.adj * $df(n.x, n.value)
-        end
-
-        function parents(n::$nodename{T}) where T <: Number
-            BADNode{T}[n.parent]
-        end
-
-        function $f(x::BADNode{T}) where T <: Number
-            $nodename(x.value, $f(x.value), zero(T), x)
+        function $f(x::BADNode{T}) where {T <: Number}
+            t = x.tape
+            r = $f(x.value)
+            function bp!(n::BADNode{T})
+                x.adj += $df(x.value, r)*n.adj
+            end
+            n = BADNode(t, r, zero(T), bp!)
+            push!(t, n)
+            n
         end
     end
 end
 
-mutable struct BADNodeAtan2{T<:Number} <: BADNode{T}
-    x::T
-    y::T
-    value::T
-    adj::T
-    lparent::BADNode{T}
-    rparent::BADNode{T}
-end
-
-function backprop!(n::BADNodeAtan2{T}) where T<:Number
-    denom = n.x*n.x + n.y*n.y
-    n.lparent.adj += n.adj * n.x / denom
-    n.rparent.adj += -n.adj * n.y / denom
-end
-
-function parents(n::BADNodeAtan2{T}) where {T<:Number}
-    BADNode{T}[n.lparent, n.rparent]
-end
-
-function atan(y::BADNode{T}, x::BADNode{T}) where {T<:Number}
-    BADNodeAtan2(x.value, y.value, atan(y.value, x.value), zero(T), y, x)
-end
-
-mutable struct BADNodeSum{T<:Number} <: BADNode{T}
-    value::T
-    adj::T
-    parents::Array{<:BADNode{T}}
-end
-
-function backprop!(n::BADNodeSum{T}) where T<:Number
-    for p in n.parents
-        p.adj += n.adj
+function atan(y::BADNode{T}, x::BADNode{T}) where {T <: Number}
+    t = (length(x.tape) == 0 ? y.tape : x.tape)
+    function bp!(n::BADNode{T})
+        denom = x.value*x.value + y.value*y.value
+        y.adj += n.adj * x.value / denom
+        x.adj -= n.adj * y.value / denom
     end
+    n = BADNode(t, atan(y.value, x.value), zero(T), bp!)
+    push!(t, n)
+    n
 end
 
-function parents(n::BADNodeSum{T}) where T<:Number
-    n.parents.reshape((prod(size(n.parents)...),))
-end
-
-function sum(xs::Array{<:BADNode{T}, N}) where {T<:Number, N<:Integer}
-    BADNodeSum(sum([x.value for x in xs]), zero(xs[1].value), xs)
-end
-
-mutable struct BADNodeLog{T<:Number} <: BADNode{T}
-    x::T
-    value::T
-    adj::T
-    parent::BADNode{T}
-end
-
-function backprop!(n::BADNodeLog{T}) where T <: Number
-    n.parent.adj += n.adj / n.x
-end
-
-function parents(n::BADNodeLog{T}) where T <: Number
-    BADNode{T}[n.parent]
-end
-
-function log(n::BADNode{T}) where T <: Number
-    BADNodeLog(n.value, log(n.value), zero(T), n)
-end
-
-mutable struct BADNodeLog1p{T<:Number} <: BADNode{T}
-    x::T
-    value::T
-    adj::T
-    parent::BADNode{T}
-end
-
-function backprop!(n::BADNodeLog1p{T}) where T <: Number
-    n.parent.adj += n.adj / (one(T) + n.x)
-end
-
-function parents(n::BADNodeLog1p{T}) where T <: Number
-    BADNode{T}[n.parent]
-end
-
-function log1p(n::BADNode{T}) where T <: Number
-    BADNodeLog1p(n.value, log1p(n.value), zero(T), n)
-end
-
-mutable struct BADNodeLogsumexp2Arg{T<:Number} <: BADNode{T}
-    x::T
-    y::T
-    value::T
-    adj::T
-    lparent::BADNode{T}
-    rparent::BADNode{T}
-end
-
-function backprop!(n::BADNodeLogsumexp2Arg{T}) where T <: Number
-    n.lparent.adj += n.adj*exp(n.x-n.value)
-    n.rparent.adj += n.adj*exp(n.y-n.value)
-end
-
-function parents(n::BADNodeLogsumexp2Arg{T}) where T <: Number
-    BADNode{T}[n.lparent, n.rparent]
-end
-
-function logsumexp(a::BADNode{T}, b::BADNode{T}) where T <: Number
-    BADNodeLogsumexp2Arg(a.value, b.value, logsumexp(a.value, b.value), zero(T), a, b)
-end
-
-mutable struct BADNodeLogsumexpArray{T<:Number} <: BADNode{T}
-    xs::Array{T, <:Any}
-    value::T
-    adj::T
-    parents::Array{BADNode{T}, <:Any}
-end
-
-function backprop!(n::BADNodeLogsumexpArray{T}) where T <: Number
-    for i in eachindex(n.parents)
-        p = n.parents[i]
-        x = n.xs[i]
-        p.adj += n.adj*exp(x-n.value)
+function sum(x::Array{BADNode{T}, N}) where {T <: Number, N}
+    local t::Array{BADNode{T}, 1}
+    for i in eachindex(x)
+        if length(x[i].tape) > 0
+            t = x[i].tape
+            break
+        end
     end
-end
 
-function parents(n::BADNodeLogsumexpArray{T}) where T <: Number
-    vec(n.parents)
-end
-
-function logsumexp(xs::Array{BADNode{T}, N}) where {T <: Number, N <: Integer}
-    xx = [x.value for x in xs]
-    BADNodeLogsumexpArray(xx, logsumexp(xx), zero(T), xs)
-end
-
-function breadth_first_apply!(fn, bplist)
-    while length(bplist) > 0
-        n = popfirst!(bplist)
-        fn(n)
-        push!(bplist, parents(n)...)
+    s = zero(T)
+    for i in eachindex(x)
+        s += x[i].value
     end
+
+    function bp!(n::BADNode{T})
+        for i in eachindex(x)
+            x[i].adj += n.adj
+        end
+    end
+
+    n = BADNode(t, s, zero(T), bp!)
+    push!(t, n)
+    n
+end
+
+function log(x::BADNode{T}) where {T <: Number}
+    t = x.tape
+    function bp!(n::BADNode{T})
+        x.adj += n.adj / x.value
+    end
+    n = BADNode(t, log(x.value), zero(T), bp!)
+    push!(t, n)
+    n
+end
+
+function log1p(x::BADNode{T}) where {T <: Number}
+    function bp!(n::BADNode{T})
+        x.adj += n.adj / (one(T) + x.value)
+    end
+    n = BADNode(x.tape, log1p(x.value), zero(T), bp!)
+    push!(x.tape, n)
+    n
+end
+
+function logsumexp(x::BADNode{T}, y::BADNode{T}) where {T <: Number}
+    t = (length(x.tape) == 0 ? y.tape : x.tape)
+    r = logsumexp(x.value, y.value)
+    function bp!(n::BADNode{T})
+        x.adj += n.adj * exp(x.value - r)
+        y.adj += n.adj * exp(y.value - r)
+    end
+    n = BADNode(t, r, zero(T), bp!)
+    push!(t, n)
+    n
+end
+
+function logsumexp(x::Array{BADNode{T}, N}) where {T <: Number, N}
+    local t::Array{BADNode{T}, 1}
+    for i in eachindex(x)
+        if length(x[i].tape) > 0
+            t = x[i].tape
+            break
+        end
+    end
+
+    xx = Array{T, N}(undef, size(x))
+    for i in eachindex(x)
+        xx[i] = x[i].value
+    end
+    r = logsumexp(xx)
+
+    function bp!(n::BADNode{T})
+        for i in eachindex(x)
+            x[i].adj += n.adj*exp(x[i].value - r)
+        end
+    end
+
+    n = BADNode(t, r, zero(T), bp!)
+    push!(t, n)
+    n
 end
 
 function value_and_gradient(f)
     function vgf(x::T) where T<:Number
-        y = convert(BADNode{T}, x)
+        t = BADNode{T}[]
+        y = BADNode(t, x, zero(T), n->())
+        push!(t, y)
         r = f(y)
         r.adj = one(T)
-        bplist = BADNode{T}[r]
-        breadth_first_apply!(backprop!, bplist)
+        while length(t) > 0
+            n = pop!(t)
+            n.backprop!(n)
+        end
         (r.value, y.adj)
     end
 
     function vgf(xs::Array{T, N}) where {T <: Number, N}
+        t = BADNode{T}[]
         ys = Array{BADNode{T}, N}(undef, size(xs))
         for i in eachindex(xs)
-            ys[i] = convert(BADNode{T}, xs[i])
+            ys[i] = BADNode(t, xs[i], zero(T), n->())
+            push!(t, ys[i])
         end
         r = f(ys)
         r.adj = one(T)
-        bplist = BADNode{T}[r]
-        breadth_first_apply!(backprop!, bplist)
+
+        while length(t) > 0
+            n = pop!(t)
+            n.backprop!(n)
+        end
+
         zs = Array{T, N}(undef, size(xs))
         for i in eachindex(xs)
             zs[i] = ys[i].adj
@@ -400,11 +303,22 @@ function value_and_gradient(f)
     end
 
     function vgf(x::Vararg{T,N}) where {T<:Number, N}
-        y = BADNode{T}[convert(BADNode{T}, xx) for xx in x]
+        t = BADNode{T}[]
+
+        y = Array{BADNode{T}, 1}(undef, length(x))
+
+        for i in eachindex(x)
+            y[i] = BADNode(t, x[i], zero(T), n->())
+            push!(t, y[i])
+        end
+
         r = f(y...)
         r.adj = one(T)
-        bplist = BADNode{T}[r]
-        breadth_first_apply!(backprop!, bplist)
+
+        while length(t) > 0
+            n = pop!(t)
+            n.backprop!(n)
+        end
 
         g = T[n.adj for n in y]
         (r.value, g)

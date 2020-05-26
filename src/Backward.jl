@@ -185,7 +185,7 @@ function atan(y::BADNode{T}, x::BADNode{T}) where {T <: Number}
 end
 
 function sum(x::Array{BADNode{T}, N}) where {T <: Number, N}
-    local t::Array{BADNode{T}, 1}
+    t = BADNode{T}[]
     for i in eachindex(x)
         if length(x[i].tape) > 0
             t = x[i].tape
@@ -241,7 +241,7 @@ function logsumexp(x::BADNode{T}, y::BADNode{T}) where {T <: Number}
 end
 
 function logsumexp(x::Array{BADNode{T}, N}) where {T <: Number, N}
-    local t::Array{BADNode{T}, 1}
+    t = BADNode{T}[]
     for i in eachindex(x)
         if length(x[i].tape) > 0
             t = x[i].tape
@@ -269,7 +269,7 @@ end
 function value_and_gradient(f)
     function vgf(x::T) where T<:Number
         t = BADNode{T}[]
-        y = BADNode(t, x, zero(T), n->())
+        y = BADNode(t, x, zero(T), (n)->())
         push!(t, y)
         r = f(y)
         r.adj = one(T)
@@ -283,8 +283,8 @@ function value_and_gradient(f)
     function vgf(xs::Array{T, N}) where {T <: Number, N}
         t = BADNode{T}[]
         ys = Array{BADNode{T}, N}(undef, size(xs))
-        for i in eachindex(xs)
-            ys[i] = BADNode(t, xs[i], zero(T), n->())
+        for i in eachindex(ys)
+            ys[i] = BADNode(t, xs[i], zero(T), (n)->())
             push!(t, ys[i])
         end
         r = f(ys)
@@ -306,9 +306,8 @@ function value_and_gradient(f)
         t = BADNode{T}[]
 
         y = Array{BADNode{T}, 1}(undef, length(x))
-
         for i in eachindex(x)
-            y[i] = BADNode(t, x[i], zero(T), n->())
+            y[i] = BADNode(t, x[i], zero(T), (n)->())
             push!(t, y[i])
         end
 

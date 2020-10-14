@@ -23,7 +23,7 @@ function make_hglikelihood(xobs, sigmaobs)
     loglike
 end
 
-nx = 100
+nx = 1000
 no = 5
 
 mu = 0.0

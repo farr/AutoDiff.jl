@@ -63,3 +63,5 @@ BenchmarkTools.Trial:
 
 julia>
 ```
+
+The implementation here is pretty similar to the Stan Math Library in spirit ([Carpenter, et al. (2015)](https://arxiv.org/abs/1509.07164)), though we exploit some Julia features not available in C++.

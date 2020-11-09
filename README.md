@@ -3,8 +3,8 @@ A good, clean Julia autodiff package.
 To install into your existing Julia code, enter the following at the Julia REPL after activating your environment:
 
 ```juliarepl
-> using Pkg
-> pkg"add https://github.com/farr/AutoDiff.jl.git"
+julia> using Pkg
+julia> pkg"add https://github.com/farr/AutoDiff.jl.git"
 ```
 
 To use:

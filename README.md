@@ -72,3 +72,7 @@ julia>
 ```
 
 The implementation here is pretty similar to the Stan Math Library in spirit ([Carpenter, et al. (2015)](https://arxiv.org/abs/1509.07164)), though we exploit some Julia features not available in C++.
+
+Note that this package was created as an educational project to teach the *method* of backwards autodiff.  For a more full-fledged autodiff experience, check out [ReverseDiff.jl](https://github.com/JuliaDiff/ReverseDiff.jl), [Tracker.jl](https://github.com/FluxML/Tracker.jl), or [Zygote.jl](https://github.com/FluxML/Zygote.jl).  `Zygote.jl` in particular has an innovative source-to-source method that exploits a number of unique features of the Julia language and runtime to achieve---in some cases---performance on-par with hand-coded backprop while at the same time (much like this code) full generality with respect to control flow, loops, etc, etc.
+
+TODO: conform to and exploit the [ChainRules.jl](https://github.com/JuliaDiff/ChainRules.jl) and `ChainRulesCore.jl` interface!
